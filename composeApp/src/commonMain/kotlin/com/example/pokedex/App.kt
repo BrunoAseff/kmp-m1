@@ -40,8 +40,8 @@ fun App() {
             else -> "Pokédex"
         }
         fun navigateTopLevel(route: Route) {
-            navController.navigate(route) {
-                popUpTo(navController.graph.findStartDestination().id) {
+            navController.navigate(route) navOptions@{
+                popUpTo(navController.graph.findStartDestination().route ?: return@navOptions) {
                     saveState = true
                 }
                 launchSingleTop = true
@@ -99,8 +99,8 @@ fun App() {
                 composable<Route.Home> {
                     HomeScreen(
                         teamCount = team.size,
-                        onNavigateToPokedex = { navController.navigate(Route.PokedexList) },
-                        onNavigateToTeam = { navController.navigate(Route.TeamBuilder) }
+                        onNavigateToPokedex = { navigateTopLevel(Route.PokedexList) },
+                        onNavigateToTeam = { navigateTopLevel(Route.TeamBuilder) }
                     )
                 }
                 composable<Route.PokedexList> {
