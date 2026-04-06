@@ -6,5 +6,3 @@ Aplicação Pokédex desenvolvida com Kotlin Multiplatform e Compose Multiplatfo
 
 - Bruno de Almeida Aseff
 - Roger Gomes
-
----
