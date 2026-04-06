@@ -16,6 +16,5 @@ data class Pokemon(
     val hp: Int,
     val attack: Int,
     val defense: Int,
-    val speed: Int,
-    val imageUrl: String
+    val speed: Int
 )

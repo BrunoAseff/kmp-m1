@@ -2,6 +2,7 @@ package com.example.pokedex
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -19,67 +21,70 @@ import com.example.pokedex.data.Pokemon
 import com.example.pokedex.data.PokemonRepository
 import com.example.pokedex.navigation.Route
 import com.example.pokedex.ui.screens.*
+import com.example.pokedex.ui.theme.PokedexTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App() {
-    MaterialTheme {
+    PokedexTheme {
         val navController = rememberNavController()
         var team by remember { mutableStateOf(listOf<Pokemon>()) }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
+        val isDetailsRoute = currentDestination?.hasRoute<Route.PokemonDetails>() == true
+        val topBarTitle = when {
+            currentDestination?.hasRoute<Route.Home>() == true -> "Pokédex"
+            currentDestination?.hasRoute<Route.PokedexList>() == true -> "Explorar"
+            currentDestination?.hasRoute<Route.PokemonDetails>() == true -> "Detalhes"
+            currentDestination?.hasRoute<Route.TeamBuilder>() == true -> "Meu Time"
+            else -> "Pokédex"
+        }
+        fun navigateTopLevel(route: Route) {
+            navController.navigate(route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
 
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            when {
-                                currentDestination?.hasRoute<Route.Home>() == true -> "Home"
-                                currentDestination?.hasRoute<Route.PokedexList>() == true -> "Pokédex"
-                                currentDestination?.hasRoute<Route.PokemonDetails>() == true -> "Detalhes"
-                                currentDestination?.hasRoute<Route.TeamBuilder>() == true -> "Meu Time"
-                                else -> "Pokédex"
+                    title = { Text(topBarTitle) },
+                    navigationIcon = {
+                        if (isDetailsRoute) {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Voltar"
+                                )
                             }
-                        )
-                    }
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+                    )
                 )
             },
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(
                         selected = currentDestination?.hierarchy?.any { it.hasRoute<Route.Home>() } == true,
-                        onClick = { 
-                            navController.navigate(Route.Home) {
-                                popUpTo(Route.Home) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navigateTopLevel(Route.Home) },
                         icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home") }
+                        label = { Text("Início") }
                     )
                     NavigationBarItem(
                         selected = currentDestination?.hierarchy?.any { it.hasRoute<Route.PokedexList>() } == true,
-                        onClick = { 
-                            navController.navigate(Route.PokedexList) {
-                                popUpTo(Route.Home)
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navigateTopLevel(Route.PokedexList) },
                         icon = { Icon(Icons.Default.List, contentDescription = "Pokédex") },
                         label = { Text("Pokédex") }
                     )
                     NavigationBarItem(
                         selected = currentDestination?.hierarchy?.any { it.hasRoute<Route.TeamBuilder>() } == true,
-                        onClick = { 
-                            navController.navigate(Route.TeamBuilder) {
-                                popUpTo(Route.Home)
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navigateTopLevel(Route.TeamBuilder) },
                         icon = { Icon(Icons.Default.Person, contentDescription = "Time") },
                         label = { Text("Time") }
                     )
@@ -93,12 +98,14 @@ fun App() {
             ) {
                 composable<Route.Home> {
                     HomeScreen(
+                        teamCount = team.size,
                         onNavigateToPokedex = { navController.navigate(Route.PokedexList) },
                         onNavigateToTeam = { navController.navigate(Route.TeamBuilder) }
                     )
                 }
                 composable<Route.PokedexList> {
                     PokedexListScreen(
+                        team = team,
                         onPokemonClick = { id ->
                             navController.navigate(Route.PokemonDetails(id))
                         }
@@ -108,6 +115,7 @@ fun App() {
                     val details: Route.PokemonDetails = backStackEntry.toRoute()
                     PokemonDetailsScreen(
                         pokemonId = details.id,
+                        isInTeam = team.any { it.id == details.id },
                         onAddToTeam = { id ->
                             val pokemon = PokemonRepository.getPokemonById(id)
                             if (pokemon != null && team.none { it.id == id }) {
