@@ -180,7 +180,7 @@ fun PokemonCard(
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "No time",
+                            text = "Em equipe",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
