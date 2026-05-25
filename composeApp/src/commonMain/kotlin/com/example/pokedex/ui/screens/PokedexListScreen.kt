@@ -16,8 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,7 @@ import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,9 +44,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.pokedex.data.Pokemon
+import com.example.pokedex.data.PokemonListItem
 import com.example.pokedex.data.PokemonRepository
 import com.example.pokedex.data.PokemonType
+import com.example.pokedex.data.TeamRepository
 import com.example.pokedex.ui.components.PokemonArtwork
 import com.example.pokedex.ui.components.PokemonTypeRow
 import com.example.pokedex.ui.components.displayName
@@ -56,7 +59,14 @@ import com.example.pokedex.ui.viewmodel.PokedexViewModel
 
 @Composable
 fun PokedexListScreen(
-    viewModel: PokedexViewModel = viewModel { PokedexViewModel() },
+    pokemonRepository: PokemonRepository,
+    teamRepository: TeamRepository,
+    viewModel: PokedexViewModel = viewModel {
+        PokedexViewModel(
+            pokemonRepository = pokemonRepository,
+            teamRepository = teamRepository
+        )
+    },
     onPokemonClick: (Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -67,16 +77,19 @@ fun PokedexListScreen(
                 CircularProgressIndicator()
             }
         }
+
         is PokedexUiState.Error -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = state.message, color = MaterialTheme.colorScheme.error)
             }
         }
+
         is PokedexUiState.Success -> {
             PokedexListContent(
                 state = state,
                 onQueryChange = viewModel::updateQuery,
                 onTypeSelect = viewModel::updateSelectedType,
+                onLoadMore = viewModel::loadNextPage,
                 onPokemonClick = onPokemonClick
             )
         }
@@ -88,16 +101,13 @@ fun PokedexListScreen(
 private fun PokedexListContent(
     state: PokedexUiState.Success,
     onQueryChange: (String) -> Unit,
-    onTypeSelect: (String) -> Unit,
+    onTypeSelect: (PokemonType?) -> Unit,
+    onLoadMore: () -> Unit,
     onPokemonClick: (Int) -> Unit
 ) {
-    val availableTypes = remember {
-        PokemonType.entries.sortedBy { it.name }
-    }
+    val availableTypes = remember(state.availableTypes) { state.availableTypes }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -113,7 +123,7 @@ private fun PokedexListContent(
                         placeholder = { Text("Procure por nome ou número") },
                         leadingIcon = {
                             Icon(
-                                Icons.Default.Search,
+                                imageVector = Icons.Default.Search,
                                 contentDescription = null
                             )
                         }
@@ -130,24 +140,22 @@ private fun PokedexListContent(
                 item {
                     FilterChip(
                         label = "Todos",
-                        selected = state.selectedType == "ALL",
-                        onClick = { onTypeSelect("ALL") }
+                        selected = state.selectedType == null,
+                        onClick = { onTypeSelect(null) }
                     )
                 }
                 items(availableTypes) { type ->
                     FilterChip(
                         label = type.displayName(),
-                        selected = state.selectedType == type.name,
-                        onClick = {
-                            onTypeSelect(if (state.selectedType == type.name) "ALL" else type.name)
-                        },
+                        selected = state.selectedType == type,
+                        onClick = { onTypeSelect(if (state.selectedType == type) null else type) },
                         type = type
                     )
                 }
             }
 
             Text(
-                text = "${state.pokemons.size} Pokémon encontrados",
+                text = "${state.pokemons.size} Pokémon carregados",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -160,12 +168,34 @@ private fun PokedexListContent(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(state.pokemons, key = { it.id }) { pokemon ->
+            itemsIndexed(
+                items = state.pokemons,
+                key = { _, pokemon -> pokemon.id }
+            ) { index, pokemon ->
+                if (state.canLoadMore && index >= state.pokemons.lastIndex - 3) {
+                    LaunchedEffect(pokemon.id) {
+                        onLoadMore()
+                    }
+                }
+
                 PokemonCard(
                     pokemon = pokemon,
                     isInTeam = pokemon.id in state.teamIds,
                     onClick = { onPokemonClick(pokemon.id) }
                 )
+            }
+
+            if (state.isLoadingMore) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
             }
         }
     }
@@ -173,7 +203,7 @@ private fun PokedexListContent(
 
 @Composable
 fun PokemonCard(
-    pokemon: Pokemon,
+    pokemon: PokemonListItem,
     isInTeam: Boolean,
     onClick: () -> Unit
 ) {
@@ -201,7 +231,7 @@ fun PokemonCard(
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "Em equipe",
+                            text = "No time",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
@@ -211,6 +241,7 @@ fun PokemonCard(
 
                 PokemonArtwork(
                     pokemonId = pokemon.id,
+                    imageUrl = pokemon.artworkUrl,
                     contentDescription = pokemon.name,
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -250,8 +281,7 @@ private fun FilterChip(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
-                (type?.let { typeColor(it) }
-                    ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.18f)
+                (type?.let(::typeColor) ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.18f)
             } else {
                 MaterialTheme.colorScheme.surface
             }

@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -38,7 +39,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.pokedex.data.Pokemon
+import com.example.pokedex.data.PokemonDetails
+import com.example.pokedex.data.PokemonRepository
+import com.example.pokedex.data.TeamRepository
 import com.example.pokedex.ui.components.PokemonArtwork
 import com.example.pokedex.ui.components.PokemonTypeRow
 import com.example.pokedex.ui.components.formatPokemonNumber
@@ -49,7 +52,15 @@ import com.example.pokedex.ui.viewmodel.PokemonDetailsViewModel
 @Composable
 fun PokemonDetailsScreen(
     pokemonId: Int,
-    viewModel: PokemonDetailsViewModel = viewModel { PokemonDetailsViewModel(pokemonId) }
+    pokemonRepository: PokemonRepository,
+    teamRepository: TeamRepository,
+    viewModel: PokemonDetailsViewModel = viewModel {
+        PokemonDetailsViewModel(
+            pokemonId = pokemonId,
+            pokemonRepository = pokemonRepository,
+            teamRepository = teamRepository
+        )
+    }
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -59,16 +70,22 @@ fun PokemonDetailsScreen(
                 CircularProgressIndicator()
             }
         }
+
         is PokemonDetailsUiState.Error -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = state.message, color = MaterialTheme.colorScheme.error)
             }
         }
+
         is PokemonDetailsUiState.Success -> {
             PokemonDetailsContent(
                 pokemon = state.pokemon,
                 isInTeam = state.isInTeam,
-                onAddToTeam = { viewModel.addToTeam() }
+                capturedLocation = state.capturedLocation,
+                capturedLocationError = state.locationError,
+                isSaving = state.isSaving,
+                onCapturedLocationChange = viewModel::updateCapturedLocation,
+                onAddToTeam = viewModel::addToTeam
             )
         }
     }
@@ -76,8 +93,12 @@ fun PokemonDetailsScreen(
 
 @Composable
 private fun PokemonDetailsContent(
-    pokemon: Pokemon,
+    pokemon: PokemonDetails,
     isInTeam: Boolean,
+    capturedLocation: String,
+    capturedLocationError: String?,
+    isSaving: Boolean,
+    onCapturedLocationChange: (String) -> Unit,
     onAddToTeam: () -> Unit
 ) {
     Column(
@@ -89,7 +110,7 @@ private fun PokemonDetailsContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(290.dp)
+                .height(320.dp)
                 .background(pokemonBrush(pokemon.types))
                 .padding(24.dp)
         ) {
@@ -118,9 +139,10 @@ private fun PokemonDetailsContent(
             }
             PokemonArtwork(
                 pokemonId = pokemon.id,
+                imageUrl = pokemon.artworkUrl,
                 contentDescription = pokemon.name,
                 modifier = Modifier
-                    .size(200.dp)
+                    .size(220.dp)
                     .align(Alignment.BottomCenter)
             )
         }
@@ -138,13 +160,17 @@ private fun PokemonDetailsContent(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = "Descrição",
+                        text = "Detalhes em tempo real",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = pokemon.description,
                         style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Habilidades: ${pokemon.abilities.joinToString { it.name }}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     HorizontalDivider()
@@ -166,17 +192,29 @@ private fun PokemonDetailsContent(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = "Status no time",
+                        text = "Salvar no time",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = if (isInTeam) {
-                            "Esse Pokémon já foi adicionado ao seu time."
+                            "Esse Pokémon já foi persistido no seu time."
                         } else {
-                            "Adicione este Pokémon ao seu time para vê-lo na aba dedicada."
+                            "Informe onde ele foi capturado para salvar permanentemente."
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = capturedLocation,
+                        onValueChange = onCapturedLocationChange,
+                        label = { Text("Onde foi capturado?") },
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = capturedLocationError != null,
+                        supportingText = {
+                            if (capturedLocationError != null) {
+                                Text(capturedLocationError)
+                            }
+                        }
                     )
                     if (isInTeam) {
                         OutlinedButton(
@@ -186,16 +224,25 @@ private fun PokemonDetailsContent(
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null)
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text("Já está no time")
+                            Text("Já está salvo")
                         }
                     } else {
                         Button(
                             onClick = onAddToTeam,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isSaving
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
+                            if (isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                            }
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text("Adicionar ao Time")
+                            Text("Salvar no Time")
                         }
                     }
                 }

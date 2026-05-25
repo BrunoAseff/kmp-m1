@@ -1,80 +1,108 @@
 package com.example.pokedex.data
 
-object PokemonRepository {
-    private val pokemonList = listOf(
-        Pokemon(
-            id = 1,
-            name = "Bulbasaur",
-            types = listOf(PokemonType.GRASS, PokemonType.POISON),
-            description = "Há uma semente de planta em suas costas desde o dia em que este Pokémon nasce. A semente cresce lentamente com o tempo.",
-            hp = 45, attack = 49, defense = 49, speed = 45
-        ),
-        Pokemon(
-            id = 4,
-            name = "Charmander",
-            types = listOf(PokemonType.FIRE),
-            description = "Tem preferência por coisas quentes. Quando chove, diz-se que vapor sai da ponta de sua cauda.",
-            hp = 39, attack = 52, defense = 43, speed = 65
-        ),
-        Pokemon(
-            id = 7,
-            name = "Squirtle",
-            types = listOf(PokemonType.WATER),
-            description = "Quando recolhe seu longo pescoço para dentro do casco, esguicha água com grande força.",
-            hp = 44, attack = 48, defense = 65, speed = 43
-        ),
-        Pokemon(
-            id = 25,
-            name = "Pikachu",
-            types = listOf(PokemonType.ELECTRIC),
-            description = "Quando acerta o oponente com sua cauda em forma de raio, libera uma descarga elétrica comparável a um relâmpago.",
-            hp = 35, attack = 55, defense = 40, speed = 90
-        ),
-        Pokemon(
-            id = 133,
-            name = "Eevee",
-            types = listOf(PokemonType.NORMAL),
-            description = "Um Pokémon extremamente raro que pode evoluir de várias formas diferentes dependendo dos estímulos que recebe.",
-            hp = 55, attack = 55, defense = 50, speed = 55
-        ),
-        Pokemon(
-            id = 150,
-            name = "Mewtwo",
-            types = listOf(PokemonType.PSYCHIC),
-            description = "Foi criado por um cientista após anos de terríveis experimentos de manipulação genética e engenharia de DNA.",
-            hp = 106, attack = 110, defense = 90, speed = 130
-        ),
-        Pokemon(
-            id = 94,
-            name = "Gengar",
-            types = listOf(PokemonType.GHOST, PokemonType.POISON),
-            description = "Na noite de lua cheia, se as sombras se moverem sozinhas e rirem, isso certamente é obra de Gengar.",
-            hp = 60, attack = 65, defense = 60, speed = 110
-        ),
-        Pokemon(
-            id = 149,
-            name = "Dragonite",
-            types = listOf(PokemonType.DRAGON, PokemonType.FLYING),
-            description = "Dizem que este Pokémon vive em algum lugar do mar e que voa pelos céus. No entanto, isso ainda é tratado como rumor.",
-            hp = 91, attack = 134, defense = 95, speed = 80
-        ),
-        Pokemon(
-            id = 3,
-            name = "Venusaur",
-            types = listOf(PokemonType.GRASS, PokemonType.POISON),
-            description = "Sua planta floresce quando está absorvendo energia solar. Ele permanece em movimento para buscar luz do sol.",
-            hp = 80, attack = 82, defense = 83, speed = 80
-        ),
-        Pokemon(
-            id = 6,
-            name = "Charizard",
-            types = listOf(PokemonType.FIRE, PokemonType.FLYING),
-            description = "Cospe fogo quente o bastante para derreter pedras. Pode causar incêndios florestais ao soprar suas chamas.",
-            hp = 78, attack = 84, defense = 78, speed = 100
+import com.example.pokedex.data.local.PokemonCacheDao
+import com.example.pokedex.data.local.PokemonCacheEntity
+import com.example.pokedex.data.remote.PokeApiService
+import com.example.pokedex.data.remote.PokemonResponse
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+
+class PokemonRepository(
+    private val pokeApiService: PokeApiService,
+    private val pokemonCacheDao: PokemonCacheDao
+) {
+    suspend fun ensureInitialSync() {
+        if (pokemonCacheDao.count() > 0) return
+
+        syncMutex.withLock {
+            if (pokemonCacheDao.count() > 0) return
+
+            val index = pokeApiService.fetchPokemonIndex(INITIAL_SYNC_LIMIT)
+            val semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
+
+            val cachedPokemons = coroutineScope {
+                index.map { entry ->
+                    async {
+                        semaphore.withPermit {
+                            pokeApiService.fetchPokemonDetails(entry.id.toString()).toCacheEntity()
+                        }
+                    }
+                }.awaitAll()
+            }.sortedBy { it.id }
+
+            pokemonCacheDao.upsertAll(cachedPokemons)
+        }
+    }
+
+    suspend fun getAvailableTypes(): List<PokemonType> =
+        pokemonCacheDao.getAvailableTypes().mapNotNull(PokemonType::fromApiName)
+
+    suspend fun getPokemonPage(
+        query: String,
+        selectedType: PokemonType?,
+        page: Int,
+        pageSize: Int
+    ): List<PokemonListItem> =
+        pokemonCacheDao.getPage(
+            query = query.trim(),
+            selectedType = selectedType?.apiName,
+            limit = pageSize,
+            offset = page * pageSize
+        ).map { entity ->
+            PokemonListItem(
+                id = entity.id,
+                name = entity.name.replaceFirstChar { it.uppercase() },
+                types = listOfNotNull(
+                    PokemonType.fromApiName(entity.primaryType),
+                    PokemonType.fromApiName(entity.secondaryType)
+                ),
+                artworkUrl = entity.artworkUrl
+            )
+        }
+
+    suspend fun getPokemonDetails(pokemonId: Int): PokemonDetails =
+        pokeApiService.fetchPokemonDetails(pokemonId.toString()).toPokemonDetails()
+
+    private fun PokemonResponse.toCacheEntity(): PokemonCacheEntity {
+        val sortedTypes = types.sortedBy { it.slot }.mapNotNull { PokemonType.fromApiName(it.type.name) }
+        val primaryType = sortedTypes.firstOrNull() ?: PokemonType.NORMAL
+        return PokemonCacheEntity(
+            id = id,
+            name = name.replaceFirstChar { it.uppercase() },
+            primaryType = primaryType.apiName,
+            secondaryType = sortedTypes.getOrNull(1)?.apiName,
+            artworkUrl = sprites.other?.officialArtwork?.frontDefault
         )
-    )
+    }
 
-    fun getPokemonList(): List<Pokemon> = pokemonList
+    private fun PokemonResponse.toPokemonDetails(): PokemonDetails {
+        val statsByName = stats.associateBy { it.stat.name }
+        val sortedTypes = types.sortedBy { it.slot }.mapNotNull { PokemonType.fromApiName(it.type.name) }
 
-    fun getPokemonById(id: Int): Pokemon? = pokemonList.find { it.id == id }
+        return PokemonDetails(
+            id = id,
+            name = name.replaceFirstChar { it.uppercase() },
+            description = "Altura: ${height / 10.0} m • Peso: ${weight / 10.0} kg",
+            heightMeters = height / 10.0,
+            weightKg = weight / 10.0,
+            hp = statsByName["hp"]?.baseStat ?: 0,
+            attack = statsByName["attack"]?.baseStat ?: 0,
+            defense = statsByName["defense"]?.baseStat ?: 0,
+            speed = statsByName["speed"]?.baseStat ?: 0,
+            abilities = abilities.map { PokemonAbility(it.ability.name.replace('-', ' ').replaceFirstChar { c -> c.uppercase() }) },
+            types = sortedTypes,
+            artworkUrl = sprites.other?.officialArtwork?.frontDefault
+        )
+    }
+
+    private companion object {
+        const val INITIAL_SYNC_LIMIT = 151
+        const val MAX_CONCURRENT_REQUESTS = 8
+        val syncMutex = Mutex()
+    }
 }

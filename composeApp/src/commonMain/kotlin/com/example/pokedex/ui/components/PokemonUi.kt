@@ -44,6 +44,7 @@ import pokedex.composeapp.generated.resources.venusaur
 @Composable
 fun PokemonArtwork(
     pokemonId: Int,
+    imageUrl: String? = null,
     contentDescription: String,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit
@@ -113,6 +114,15 @@ fun PokemonTypeRow(
 }
 
 fun pokemonBrush(types: List<PokemonType>): Brush {
+    if (types.isEmpty()) {
+        return Brush.linearGradient(
+            listOf(
+                Color(0xFF4B8EF7),
+                Color(0xFF8CA8FF)
+            )
+        )
+    }
+
     val first = typeColor(types.first())
     val second = typeColor(types.getOrElse(1) { types.first() }).copy(alpha = 0.72f)
     return Brush.linearGradient(listOf(first, second))
@@ -139,26 +149,7 @@ fun typeColor(type: PokemonType): Color = when (type) {
     PokemonType.STEEL -> Color(0xFF7D9AAE)
 }
 
-fun PokemonType.displayName(): String = when (this) {
-    PokemonType.FIRE -> "Fogo"
-    PokemonType.WATER -> "Água"
-    PokemonType.GRASS -> "Grama"
-    PokemonType.ELECTRIC -> "Elétrico"
-    PokemonType.PSYCHIC -> "Psíquico"
-    PokemonType.ICE -> "Gelo"
-    PokemonType.DRAGON -> "Dragão"
-    PokemonType.DARK -> "Sombrio"
-    PokemonType.FAIRY -> "Fada"
-    PokemonType.NORMAL -> "Normal"
-    PokemonType.FIGHTING -> "Lutador"
-    PokemonType.FLYING -> "Voador"
-    PokemonType.POISON -> "Venenoso"
-    PokemonType.GROUND -> "Terra"
-    PokemonType.ROCK -> "Pedra"
-    PokemonType.BUG -> "Inseto"
-    PokemonType.GHOST -> "Fantasma"
-    PokemonType.STEEL -> "Aço"
-}
+fun PokemonType.displayName(): String = displayName
 
 fun formatPokemonNumber(id: Int): String = "#${id.toString().padStart(3, '0')}"
 

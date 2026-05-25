@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -38,19 +38,38 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.pokedex.data.TeamRepository
 import com.example.pokedex.ui.components.PokemonArtwork
+import com.example.pokedex.ui.viewmodel.HomeUiState
 import com.example.pokedex.ui.viewmodel.HomeViewModel
 
 @Composable
 fun HomeScreen(
-    viewModel: HomeViewModel = viewModel { HomeViewModel() },
+    teamRepository: TeamRepository,
+    viewModel: HomeViewModel = viewModel { HomeViewModel(teamRepository) },
     onNavigateToPokedex: () -> Unit,
     onNavigateToTeam: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val teamCount = (uiState as? HomeUiState.Success)?.teamCount ?: 0
+
+    HomeScreenContent(
+        teamCount = teamCount,
+        onNavigateToPokedex = onNavigateToPokedex,
+        onNavigateToTeam = onNavigateToTeam
+    )
+}
+
+@Composable
+internal fun HomeScreenContent(
+    teamCount: Int,
+    onNavigateToPokedex: () -> Unit,
+    onNavigateToTeam: () -> Unit,
+    modifier: Modifier = Modifier
+) {
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -113,13 +132,13 @@ fun HomeScreen(
             HomeActionCard(
                 title = "Explorar Pokédex",
                 subtitle = "10 Pokémon",
-                icon = { Icon(Icons.Default.ListAlt, contentDescription = null) },
+                icon = { Icon(Icons.AutoMirrored.Filled.ListAlt, contentDescription = null) },
                 modifier = Modifier.weight(1f),
                 onClick = onNavigateToPokedex
             )
             HomeActionCard(
                 title = "Meu Time",
-                subtitle = "${uiState.teamCount} selecionado(s)",
+                subtitle = "$teamCount selecionado(s)",
                 icon = { Icon(Icons.Default.Groups, contentDescription = null) },
                 modifier = Modifier.weight(1f),
                 onClick = onNavigateToTeam,

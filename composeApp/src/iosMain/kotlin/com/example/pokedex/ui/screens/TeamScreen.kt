@@ -32,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.pokedex.data.TeamRepository
 import com.example.pokedex.ui.components.PokemonArtwork
 import com.example.pokedex.ui.components.PokemonTypeRow
 import com.example.pokedex.ui.components.formatPokemonNumber
@@ -41,8 +43,9 @@ import com.example.pokedex.ui.viewmodel.TeamViewModel
 
 @Composable
 actual fun TeamScreen(
-    viewModel: TeamViewModel
+    teamRepository: TeamRepository
 ) {
+    val viewModel: TeamViewModel = viewModel { TeamViewModel(teamRepository) }
     val uiState by viewModel.uiState.collectAsState()
 
     when (val state = uiState) {
@@ -184,6 +187,7 @@ actual fun TeamScreen(
                                     ) {
                                         PokemonArtwork(
                                             pokemonId = pokemon.id,
+                                            imageUrl = pokemon.artworkUrl,
                                             contentDescription = pokemon.name,
                                             modifier = Modifier.size(70.dp)
                                         )
@@ -202,6 +206,11 @@ actual fun TeamScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         PokemonTypeRow(types = pokemon.types)
+                                        Text(
+                                            text = "Capturado em ${pokemon.capturedLocation}",
+                                            color = Color(0xFF6E7684),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
                                     }
                                     TextButton(
                                         onClick = { viewModel.removeFromTeam(pokemon.id) },

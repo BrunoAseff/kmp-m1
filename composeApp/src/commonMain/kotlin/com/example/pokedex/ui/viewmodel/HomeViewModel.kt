@@ -8,16 +8,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-data class HomeUiState(
-    val teamCount: Int = 0
-)
+sealed interface HomeUiState {
+    data object Loading : HomeUiState
+    data class Success(val teamCount: Int) : HomeUiState
+    data class Error(val message: String) : HomeUiState
+}
 
-class HomeViewModel : ViewModel() {
-    val uiState: StateFlow<HomeUiState> = TeamRepository.team
-        .map { HomeUiState(teamCount = it.size) }
+class HomeViewModel(
+    teamRepository: TeamRepository
+) : ViewModel() {
+    val uiState: StateFlow<HomeUiState> = teamRepository.teamCount
+        .map { count: Int -> HomeUiState.Success(teamCount = count) as HomeUiState }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = HomeUiState()
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = HomeUiState.Loading
         )
 }
