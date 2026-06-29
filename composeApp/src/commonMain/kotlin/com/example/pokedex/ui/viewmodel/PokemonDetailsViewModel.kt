@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokedex.data.PokemonDetails
 import com.example.pokedex.data.PokemonRepository
 import com.example.pokedex.data.TeamRepository
+import com.example.pokedex.hardware.CaptureLocation
 import com.example.pokedex.hardware.CaptureResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,15 +37,15 @@ class PokemonDetailsViewModel(
 
     val uiState: StateFlow<PokemonDetailsUiState> = combine(
         _detailsState,
-        teamRepository.observeIsInTeam(pokemonId)
-    ) { detailsState, isInTeam ->
+        teamRepository.observeTeamPokemon(pokemonId)
+    ) { detailsState, teamPokemon ->
         when {
             detailsState.errorMessage != null -> PokemonDetailsUiState.Error(detailsState.errorMessage)
             detailsState.isLoading || detailsState.pokemon == null -> PokemonDetailsUiState.Loading
             else -> PokemonDetailsUiState.Success(
                 pokemon = detailsState.pokemon,
-                isInTeam = isInTeam,
-                captureResult = detailsState.captureResult,
+                isInTeam = teamPokemon != null,
+                captureResult = detailsState.captureResult ?: teamPokemon?.toCaptureResult(),
                 captureError = detailsState.captureError,
                 isSaving = detailsState.isSaving
             )
@@ -137,6 +138,16 @@ class PokemonDetailsViewModel(
 
 private fun com.example.pokedex.hardware.CaptureLocation.formatCoordinates(): String =
     "${latitude.formatCoordinate()}, ${longitude.formatCoordinate()}"
+
+private fun com.example.pokedex.data.TeamPokemon.toCaptureResult(): CaptureResult? {
+    val latitude = latitude ?: return null
+    val longitude = longitude ?: return null
+    val photoPath = photoPath ?: return null
+    return CaptureResult(
+        photoPath = photoPath,
+        location = CaptureLocation(latitude = latitude, longitude = longitude)
+    )
+}
 
 private fun Double.formatCoordinate(): String {
     val rounded = kotlin.math.round(this * 1000000.0) / 1000000.0

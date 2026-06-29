@@ -10,26 +10,15 @@ class TeamRepository(
     private val teamPokemonDao: TeamPokemonDao
 ) {
     val team: Flow<List<TeamPokemon>> = teamPokemonDao.observeTeam().map { entities ->
-        entities.map { entity ->
-            TeamPokemon(
-                id = entity.pokemonId,
-                name = entity.name,
-                types = listOfNotNull(
-                    PokemonType.fromApiName(entity.primaryType),
-                    PokemonType.fromApiName(entity.secondaryType)
-                ),
-                artworkUrl = entity.artworkUrl,
-                capturedLocation = entity.capturedLocation,
-                latitude = entity.latitude,
-                longitude = entity.longitude,
-                photoPath = entity.photoPath
-            )
-        }
+        entities.map { entity -> entity.toTeamPokemon() }
     }
 
     val teamCount: Flow<Int> = teamPokemonDao.observeTeamCount()
 
     fun observeIsInTeam(pokemonId: Int): Flow<Boolean> = teamPokemonDao.observeIsInTeam(pokemonId)
+
+    fun observeTeamPokemon(pokemonId: Int): Flow<TeamPokemon?> =
+        teamPokemonDao.observeTeamPokemon(pokemonId).map { entity -> entity?.toTeamPokemon() }
 
     suspend fun addToTeam(
         pokemon: PokemonDetails,
@@ -58,4 +47,19 @@ class TeamRepository(
     suspend fun removeFromTeam(pokemonId: Int) {
         teamPokemonDao.removeByPokemonId(pokemonId)
     }
+
+    private fun TeamPokemonEntity.toTeamPokemon(): TeamPokemon =
+        TeamPokemon(
+            id = pokemonId,
+            name = name,
+            types = listOfNotNull(
+                PokemonType.fromApiName(primaryType),
+                PokemonType.fromApiName(secondaryType)
+            ),
+            artworkUrl = artworkUrl,
+            capturedLocation = capturedLocation,
+            latitude = latitude,
+            longitude = longitude,
+            photoPath = photoPath
+        )
 }

@@ -17,6 +17,9 @@ interface TeamPokemonDao {
     @Query("SELECT EXISTS(SELECT 1 FROM team_pokemon WHERE pokemonId = :pokemonId)")
     fun observeIsInTeam(pokemonId: Int): Flow<Boolean>
 
+    @Query("SELECT * FROM team_pokemon WHERE pokemonId = :pokemonId")
+    fun observeTeamPokemon(pokemonId: Int): Flow<TeamPokemonEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: TeamPokemonEntity)
 

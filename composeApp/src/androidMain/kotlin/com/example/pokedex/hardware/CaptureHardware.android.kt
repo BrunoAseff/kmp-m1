@@ -12,6 +12,7 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -195,7 +196,7 @@ private fun Context.hasPermission(permission: String): Boolean =
     ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
 private fun createCaptureFile(context: Context): File {
-    val directory = File(context.cacheDir, "captures").apply { mkdirs() }
+    val directory = File(context.filesDir, "captures").apply { mkdirs() }
     return File(directory, "pokemon_capture_${System.currentTimeMillis()}.jpg")
 }
 
@@ -206,7 +207,7 @@ private suspend fun currentLocation(context: Context): CaptureLocation = withCon
         ?: throw IllegalStateException("Ative o GPS ou a localização de rede para continuar.")
 
     val lastKnown = locationManager.getLastKnownLocation(provider)
-    if (lastKnown != null) {
+    if (lastKnown != null && lastKnown.isFreshEnough()) {
         return@withContext lastKnown.toCaptureLocation()
     }
 
@@ -248,3 +249,13 @@ private fun bestEnabledProvider(locationManager: LocationManager): String? =
 
 private fun Location.toCaptureLocation(): CaptureLocation =
     CaptureLocation(latitude = latitude, longitude = longitude)
+
+private fun Location.isFreshEnough(): Boolean {
+    val ageMillis = SystemClock.elapsedRealtimeNanos().let { now ->
+        (now - elapsedRealtimeNanos) / NANOS_PER_MILLI
+    }
+    return ageMillis <= MAX_LAST_KNOWN_LOCATION_AGE_MILLIS
+}
+
+private const val MAX_LAST_KNOWN_LOCATION_AGE_MILLIS = 2 * 60 * 1000L
+private const val NANOS_PER_MILLI = 1_000_000L

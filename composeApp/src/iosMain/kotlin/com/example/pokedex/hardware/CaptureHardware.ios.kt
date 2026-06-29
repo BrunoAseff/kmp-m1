@@ -34,8 +34,10 @@ import platform.CoreLocation.CLLocation
 import platform.CoreLocation.CLLocationManager
 import platform.CoreLocation.CLLocationManagerDelegateProtocol
 import platform.Foundation.NSDate
+import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
-import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.NSUserDomainMask
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSURL
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
@@ -49,6 +51,8 @@ import platform.UIKit.UIImageView
 import platform.UIKit.UIViewContentMode
 import platform.UIKit.UINavigationControllerDelegateProtocol
 import platform.UIKit.UIViewController
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 import platform.darwin.NSObject
 
 @Composable
@@ -152,7 +156,9 @@ private class IosCaptureCoordinator(
             AVAuthorizationStatusAuthorized -> requestLocation()
             AVAuthorizationStatusDenied, AVAuthorizationStatusRestricted -> deny()
             else -> AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted ->
-                if (granted) requestLocation() else deny()
+                onMain {
+                    if (granted) requestLocation() else deny()
+                }
             }
         }
     }
@@ -168,24 +174,26 @@ private class IosCaptureCoordinator(
     }
 
     override fun locationManagerDidChangeAuthorization(manager: CLLocationManager) {
-        requestLocation()
+        onMain { requestLocation() }
     }
 
     override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
-        val location = didUpdateLocations.lastOrNull() as? CLLocation
-        if (location == null) {
-            fail("Não foi possível obter a localização atual.")
-            return
+        onMain {
+            val location = didUpdateLocations.lastOrNull() as? CLLocation
+            if (location == null) {
+                fail("Não foi possível obter a localização atual.")
+                return@onMain
+            }
+            currentLocation = CaptureLocation(
+                latitude = location.coordinate.latitude,
+                longitude = location.coordinate.longitude
+            )
+            presentCamera()
         }
-        currentLocation = CaptureLocation(
-            latitude = location.coordinate.latitude,
-            longitude = location.coordinate.longitude
-        )
-        presentCamera()
     }
 
     override fun locationManager(manager: CLLocationManager, didFailWithError: platform.Foundation.NSError) {
-        fail("Não foi possível obter a localização atual.")
+        onMain { fail("Não foi possível obter a localização atual.") }
     }
 
     private fun presentCamera() {
@@ -232,7 +240,7 @@ private class IosCaptureCoordinator(
 
     @OptIn(ExperimentalForeignApi::class)
     private fun saveImage(image: UIImage): String {
-        val directory = "${NSTemporaryDirectory()}captures"
+        val directory = "${documentsDirectory()}/captures"
         NSFileManager.defaultManager.createDirectoryAtPath(
             path = directory,
             withIntermediateDirectories = true,
@@ -254,5 +262,14 @@ private class IosCaptureCoordinator(
     private fun fail(message: String) {
         setCaptureInProgress(false)
         onCaptureFailed(message)
+    }
+}
+
+private fun documentsDirectory(): String =
+    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).first() as String
+
+private fun onMain(block: () -> Unit) {
+    dispatch_async(dispatch_get_main_queue()) {
+        block()
     }
 }
