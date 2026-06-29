@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokedex.data.TeamRepository
+import com.example.pokedex.hardware.CapturedPhotoPreview
 import com.example.pokedex.ui.components.PokemonArtwork
 import com.example.pokedex.ui.components.PokemonTypeRow
 import com.example.pokedex.ui.components.formatPokemonNumber
@@ -116,53 +118,84 @@ actual fun TeamScreen(
                             shape = RoundedCornerShape(28.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier.padding(14.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(92.dp)
-                                        .background(
-                                            brush = pokemonBrush(pokemon.types),
-                                            shape = RoundedCornerShape(24.dp)
-                                        ),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    PokemonArtwork(
-                                        pokemonId = pokemon.id,
-                                        imageUrl = pokemon.artworkUrl,
-                                        contentDescription = pokemon.name,
-                                        modifier = Modifier.size(76.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(92.dp)
+                                            .background(
+                                                brush = pokemonBrush(pokemon.types),
+                                                shape = RoundedCornerShape(24.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        PokemonArtwork(
+                                            pokemonId = pokemon.id,
+                                            imageUrl = pokemon.artworkUrl,
+                                            contentDescription = pokemon.name,
+                                            modifier = Modifier.size(76.dp)
+                                        )
+                                    }
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = pokemon.name,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = formatPokemonNumber(pokemon.id),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        PokemonTypeRow(types = pokemon.types)
+                                        Text(
+                                            text = "Capturado em ${pokemon.capturedLocation}",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    IconButton(onClick = { viewModel.removeFromTeam(pokemon.id) }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Remover",
+                                            tint = Color(0xFFC83C5A)
+                                        )
+                                    }
+                                }
+
+                                if (pokemon.photoPath != null) {
+                                    CapturedPhotoPreview(
+                                        photoPath = pokemon.photoPath,
+                                        contentDescription = "Foto de captura de ${pokemon.name}",
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = pokemon.name,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = formatPokemonNumber(pokemon.id),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    PokemonTypeRow(types = pokemon.types)
-                                    Text(
-                                        text = "Capturado em ${pokemon.capturedLocation}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                IconButton(onClick = { viewModel.removeFromTeam(pokemon.id) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Remover",
-                                        tint = Color(0xFFC83C5A)
-                                    )
+
+                                if (pokemon.latitude != null && pokemon.longitude != null) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "Lat ${pokemon.latitude} • Long ${pokemon.longitude}",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                         }

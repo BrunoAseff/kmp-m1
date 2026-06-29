@@ -17,7 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -27,7 +29,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -42,6 +43,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pokedex.data.PokemonDetails
 import com.example.pokedex.data.PokemonRepository
 import com.example.pokedex.data.TeamRepository
+import com.example.pokedex.hardware.CaptureResult
+import com.example.pokedex.hardware.CapturedPhotoPreview
+import com.example.pokedex.hardware.rememberCaptureHardwareController
 import com.example.pokedex.ui.components.PokemonArtwork
 import com.example.pokedex.ui.components.PokemonTypeRow
 import com.example.pokedex.ui.components.formatPokemonNumber
@@ -81,10 +85,11 @@ fun PokemonDetailsScreen(
             PokemonDetailsContent(
                 pokemon = state.pokemon,
                 isInTeam = state.isInTeam,
-                capturedLocation = state.capturedLocation,
-                capturedLocationError = state.locationError,
+                captureResult = state.captureResult,
+                captureError = state.captureError,
                 isSaving = state.isSaving,
-                onCapturedLocationChange = viewModel::updateCapturedLocation,
+                onCaptureCompleted = viewModel::onCaptureCompleted,
+                onCaptureError = viewModel::onCaptureError,
                 onAddToTeam = viewModel::addToTeam
             )
         }
@@ -95,12 +100,19 @@ fun PokemonDetailsScreen(
 private fun PokemonDetailsContent(
     pokemon: PokemonDetails,
     isInTeam: Boolean,
-    capturedLocation: String,
-    capturedLocationError: String?,
+    captureResult: CaptureResult?,
+    captureError: String?,
     isSaving: Boolean,
-    onCapturedLocationChange: (String) -> Unit,
+    onCaptureCompleted: (CaptureResult) -> Unit,
+    onCaptureError: (String) -> Unit,
     onAddToTeam: () -> Unit
 ) {
+    val captureController = rememberCaptureHardwareController(
+        onCaptureCompleted = onCaptureCompleted,
+        onPermissionDenied = onCaptureError,
+        onCaptureFailed = onCaptureError
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -198,24 +210,46 @@ private fun PokemonDetailsContent(
                     )
                     Text(
                         text = if (isInTeam) {
-                            "Esse Pokémon já foi persistido no seu time."
+                            "Esse Pokémon já foi persistido no seu time com foto e coordenadas."
                         } else {
-                            "Informe onde ele foi capturado para salvar permanentemente."
+                            "Capture uma foto do local e registre automaticamente as coordenadas via GPS."
                         },
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    OutlinedTextField(
-                        value = capturedLocation,
-                        onValueChange = onCapturedLocationChange,
-                        label = { Text("Onde foi capturado?") },
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = capturedLocationError != null,
-                        supportingText = {
-                            if (capturedLocationError != null) {
-                                Text(capturedLocationError)
-                            }
-                        }
+
+                    CapturedPhotoPreview(
+                        photoPath = captureResult?.photoPath,
+                        contentDescription = "Foto de captura de ${pokemon.name}",
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    CaptureLocationCard(captureResult = captureResult)
+
+                    if (captureError != null) {
+                        Text(
+                            text = captureError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = captureController::capture,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isInTeam && !isSaving && !captureController.isCaptureInProgress
+                    ) {
+                        if (captureController.isCaptureInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null)
+                        }
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(if (captureResult == null) "Capturar foto e GPS" else "Capturar novamente")
+                    }
+
                     if (isInTeam) {
                         OutlinedButton(
                             onClick = {},
@@ -230,7 +264,7 @@ private fun PokemonDetailsContent(
                         Button(
                             onClick = onAddToTeam,
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = !isSaving
+                            enabled = !isSaving && captureResult != null
                         ) {
                             if (isSaving) {
                                 CircularProgressIndicator(
@@ -246,6 +280,46 @@ private fun PokemonDetailsContent(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CaptureLocationCard(captureResult: CaptureResult?) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.LocationOn,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Localização da captura",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (captureResult == null) {
+                        "Aguardando coordenadas do GPS."
+                    } else {
+                        "Lat ${captureResult.location.latitude} • Long ${captureResult.location.longitude}"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

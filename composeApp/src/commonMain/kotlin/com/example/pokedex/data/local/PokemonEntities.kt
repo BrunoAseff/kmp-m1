@@ -1,5 +1,6 @@
 package com.example.pokedex.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -20,5 +21,9 @@ data class TeamPokemonEntity(
     val secondaryType: String?,
     val artworkUrl: String?,
     val capturedLocation: String,
+    val latitude: Double?,
+    val longitude: Double?,
+    @ColumnInfo(name = "photo_path")
+    val photoPath: String?,
     val capturedAtEpochMillis: Long
 )

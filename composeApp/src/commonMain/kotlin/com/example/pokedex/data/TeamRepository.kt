@@ -19,7 +19,10 @@ class TeamRepository(
                     PokemonType.fromApiName(entity.secondaryType)
                 ),
                 artworkUrl = entity.artworkUrl,
-                capturedLocation = entity.capturedLocation
+                capturedLocation = entity.capturedLocation,
+                latitude = entity.latitude,
+                longitude = entity.longitude,
+                photoPath = entity.photoPath
             )
         }
     }
@@ -28,7 +31,13 @@ class TeamRepository(
 
     fun observeIsInTeam(pokemonId: Int): Flow<Boolean> = teamPokemonDao.observeIsInTeam(pokemonId)
 
-    suspend fun addToTeam(pokemon: PokemonDetails, capturedLocation: String) {
+    suspend fun addToTeam(
+        pokemon: PokemonDetails,
+        capturedLocation: String,
+        latitude: Double,
+        longitude: Double,
+        photoPath: String
+    ) {
         val types = pokemon.types
         teamPokemonDao.upsert(
             TeamPokemonEntity(
@@ -38,6 +47,9 @@ class TeamRepository(
                 secondaryType = types.getOrNull(1)?.apiName,
                 artworkUrl = pokemon.artworkUrl,
                 capturedLocation = capturedLocation,
+                latitude = latitude,
+                longitude = longitude,
+                photoPath = photoPath,
                 capturedAtEpochMillis = Clock.System.now().toEpochMilliseconds()
             )
         )

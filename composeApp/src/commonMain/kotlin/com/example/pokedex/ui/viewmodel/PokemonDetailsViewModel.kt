@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pokedex.data.PokemonDetails
 import com.example.pokedex.data.PokemonRepository
 import com.example.pokedex.data.TeamRepository
+import com.example.pokedex.hardware.CaptureResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,8 +19,8 @@ sealed interface PokemonDetailsUiState {
     data class Success(
         val pokemon: PokemonDetails,
         val isInTeam: Boolean,
-        val capturedLocation: String,
-        val locationError: String?,
+        val captureResult: CaptureResult?,
+        val captureError: String?,
         val isSaving: Boolean
     ) : PokemonDetailsUiState
 
@@ -43,8 +44,8 @@ class PokemonDetailsViewModel(
             else -> PokemonDetailsUiState.Success(
                 pokemon = detailsState.pokemon,
                 isInTeam = isInTeam,
-                capturedLocation = detailsState.capturedLocation,
-                locationError = detailsState.locationError,
+                captureResult = detailsState.captureResult,
+                captureError = detailsState.captureError,
                 isSaving = detailsState.isSaving
             )
         }
@@ -58,32 +59,44 @@ class PokemonDetailsViewModel(
         loadPokemon()
     }
 
-    fun updateCapturedLocation(value: String) {
+    fun onCaptureCompleted(result: CaptureResult) {
         _detailsState.update {
-            it.copy(capturedLocation = value, locationError = null)
+            it.copy(captureResult = result, captureError = null)
         }
+    }
+
+    fun onCaptureError(message: String) {
+        _detailsState.update { it.copy(captureError = message) }
     }
 
     fun addToTeam() {
         val snapshot = _detailsState.value
         val pokemon = snapshot.pokemon ?: return
-        val trimmedLocation = snapshot.capturedLocation.trim()
+        val captureResult = snapshot.captureResult
 
-        if (trimmedLocation.isBlank()) {
-            _detailsState.update { it.copy(locationError = "Informe onde o Pokémon foi capturado.") }
+        if (captureResult == null) {
+            _detailsState.update {
+                it.copy(captureError = "Capture uma foto e a localização atual antes de salvar.")
+            }
             return
         }
 
         viewModelScope.launch {
-            _detailsState.update { it.copy(isSaving = true, locationError = null) }
+            _detailsState.update { it.copy(isSaving = true, captureError = null) }
             try {
-                teamRepository.addToTeam(pokemon, trimmedLocation)
+                teamRepository.addToTeam(
+                    pokemon = pokemon,
+                    capturedLocation = captureResult.location.formatCoordinates(),
+                    latitude = captureResult.location.latitude,
+                    longitude = captureResult.location.longitude,
+                    photoPath = captureResult.photoPath
+                )
                 _detailsState.update { it.copy(isSaving = false) }
             } catch (error: Throwable) {
                 _detailsState.update {
                     it.copy(
                         isSaving = false,
-                        locationError = "Não foi possível salvar este Pokémon no time."
+                        captureError = "Não foi possível salvar este Pokémon no time."
                     )
                 }
             }
@@ -116,8 +129,16 @@ class PokemonDetailsViewModel(
         val pokemon: PokemonDetails? = null,
         val isLoading: Boolean = true,
         val isSaving: Boolean = false,
-        val capturedLocation: String = "",
-        val locationError: String? = null,
+        val captureResult: CaptureResult? = null,
+        val captureError: String? = null,
         val errorMessage: String? = null
     )
+}
+
+private fun com.example.pokedex.hardware.CaptureLocation.formatCoordinates(): String =
+    "${latitude.formatCoordinate()}, ${longitude.formatCoordinate()}"
+
+private fun Double.formatCoordinate(): String {
+    val rounded = kotlin.math.round(this * 1000000.0) / 1000000.0
+    return rounded.toString()
 }

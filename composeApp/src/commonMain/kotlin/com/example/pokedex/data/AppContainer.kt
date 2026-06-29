@@ -3,6 +3,7 @@ package com.example.pokedex.data
 import androidx.room.RoomDatabase
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.example.pokedex.data.local.AppDatabase
+import com.example.pokedex.data.local.MIGRATION_1_2
 import com.example.pokedex.data.remote.PokeApiService
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -15,6 +16,7 @@ class AppContainer(
 ) {
     private val database = databaseBuilder
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(MIGRATION_1_2)
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 

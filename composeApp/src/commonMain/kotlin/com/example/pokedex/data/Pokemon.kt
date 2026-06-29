@@ -59,5 +59,8 @@ data class TeamPokemon(
     val name: String,
     val types: List<PokemonType>,
     val artworkUrl: String?,
-    val capturedLocation: String
+    val capturedLocation: String,
+    val latitude: Double?,
+    val longitude: Double?,
+    val photoPath: String?
 )
